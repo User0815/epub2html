@@ -109,6 +109,28 @@ def get_toc(root_file):
     return root_dir + toc_file
 
 
+def extract_content(root_dir, opf_file):
+    dom = get_xml(opf_file)
+    xmlTag = dom.getElementsByTagName('package')[0].\
+                getElementsByTagName('spine')[0].getElementsByTagName('itemref')
+    spinelist = [node.attributes['idref'].value for node in xmlTag]
+
+    xmlTag = dom.getElementsByTagName('package')[0].\
+                getElementsByTagName('manifest')[0].getElementsByTagName('item')
+    manifest = {}
+    for node in xmlTag:
+        manifest[node.attributes['id'].value] = node.attributes['href'].value
+
+    content = []
+    for ref in spinelist:
+        chap = [root_dir + manifest[ref]]
+        xmlTag = get_xml(chap[0])
+        for node in xmlTag.getElementsByTagName('body')[0].childNodes:
+            chap.append(node)
+        content.append(chap)
+    return content
+        
+
 def get_chapter_list(epub_dir, root_dir, toc_file):
     """Build a list containing chapter names, their filenames, etc."""
     table_of_contents = []
@@ -126,11 +148,6 @@ def get_chapter_list(epub_dir, root_dir, toc_file):
             chapter_anchor = ''
         table_of_contents.append([chapter_title,
                                   chapter_file, chapter_anchor])
-
-    for chap in table_of_contents:
-        xmlTag = get_xml(chap[1])
-        for node in xmlTag.getElementsByTagName('body')[0].childNodes:
-            chap.append(node)
 
     return table_of_contents
  
@@ -190,7 +207,7 @@ def make_head(doc, args, table_of_contents, epub_dir, book_file):
     return head_tag
 
 
-def make_body(doc, table_of_contents):
+def make_body(doc, table_of_contents, contents):
     """Build the XML "body" tag."""
     body_tag = doc.createElement('body')
 
@@ -235,18 +252,14 @@ def make_body(doc, table_of_contents):
 
         # Fill in the content 
     inserted_chapters = []
-    for chap in table_of_contents:
+    for chap in contents:
         # insert anchor here
-        if (len(chap[2])==0):
-            anchor_tag = doc.createElement('a')
-            anchor_tag.attributes['id'] = chap[1]
-            content_tag.appendChild(anchor_tag)
-         # make sure this file hasn't been already appended
-        if not chap[1] in inserted_chapters:
-            inserted_chapters.append(chap[1])
-            # now append all the <p>'s and so on
-            for node in chap[3:]:
-                content_tag.appendChild(node)
+        anchor_tag = doc.createElement('a')
+        anchor_tag.attributes['id'] = chap[0]
+        content_tag.appendChild(anchor_tag)
+        # now append all the <p>'s and so on
+        for node in chap[1:]:
+            content_tag.appendChild(node)
     body_tag.appendChild(content_tag)
     return body_tag
 
@@ -268,6 +281,7 @@ def main():
     root_dir = os.path.dirname(root_file) + "/"
 
     toc_file = get_toc(root_file)
+    contents = extract_content(root_dir, root_file)
     
     table_of_contents = get_chapter_list(epub_dir, root_dir, toc_file)
 
@@ -280,16 +294,16 @@ def main():
     doc.appendChild(html_tag)
 
     html_tag.appendChild(make_head(doc, args, table_of_contents, epub_dir, book_file))
-    html_tag.appendChild(make_body(doc, table_of_contents))
+    html_tag.appendChild(make_body(doc, table_of_contents, contents))
 
         # write DOM to file
     with open(book_file, 'w') as f:
         f.write(doc.toprettyxml().encode('utf8'))
 
         # delete the old html files. they only take up space
-    for chap in table_of_contents:
+    for chap in contents:
         try: 
-            os.remove(chap[1])
+            os.remove(chap[0])
         except OSError:
             pass
 
