@@ -97,15 +97,15 @@ def get_opf(epub_dir):
 # TODO
 
 
-def get_toc(root_file):
+def get_toc(opf_file):
     """Return the filename of the file containing the table of contents."""
-    dom = get_xml(root_file)
+    dom = get_xml(opf_file)
     xmlTag = dom.getElementsByTagName('manifest')[0].getElementsByTagName('item')
     for node in xmlTag:
         if (node.attributes['id'].value == "ncx"):
           toc_file = node.attributes['href'].value
           break
-    root_dir = os.path.dirname(root_file) + "/"
+    root_dir = os.path.dirname(opf_file) + "/"
     return root_dir + toc_file
 
 
@@ -263,8 +263,15 @@ def make_body(doc, table_of_contents, contents):
     body_tag.appendChild(content_tag)
     return body_tag
 
-# TODO fix links. All links in the original document point to anchors in
-# other files.
+
+def fix_links(doc):
+    all_links = doc.getElementsByTagName('a')
+    for link in all_links:
+        try:
+            link.attributes['href'].value = '#' + \
+                link.attributes['href'].value.split('#')[-1]
+        except KeyError, IndexError:
+            pass
 
 
 def main():
@@ -277,11 +284,11 @@ def main():
     subprocess.call(["unzip", "-qo", epub_file, "-d", epub_dir])
 
         # Extract information from the epub files
-    root_file = epub_dir + get_opf(epub_dir)
-    root_dir = os.path.dirname(root_file) + "/"
+    opf_file = epub_dir + get_opf(epub_dir)
+    root_dir = os.path.dirname(opf_file) + "/"
 
-    toc_file = get_toc(root_file)
-    contents = extract_content(root_dir, root_file)
+    toc_file = get_toc(opf_file)
+    contents = extract_content(root_dir, opf_file)
     
     table_of_contents = get_chapter_list(epub_dir, root_dir, toc_file)
 
@@ -295,6 +302,7 @@ def main():
 
     html_tag.appendChild(make_head(doc, args, table_of_contents, epub_dir, book_file))
     html_tag.appendChild(make_body(doc, table_of_contents, contents))
+    fix_links(doc)
 
         # write DOM to file
     with open(book_file, 'w') as f:
